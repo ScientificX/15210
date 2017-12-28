@@ -1,0 +1,57 @@
+functor MkSkyline (structure Seq : SEQUENCE)
+  :> SKYLINE where type skyline = (int * int) Seq.t =
+struct
+
+  type skyline = (int * int) Seq.t
+
+  exception NotYetImplemented
+
+  datatype alignment = L | R
+
+  fun singleton (l, h, r) =
+    let
+      fun tab_fun 0 = (l,h)
+         |tab_fun _ = (r,0)
+    in
+      Seq.tabulate tab_fun 2
+    end
+
+  fun combine (sky1, sky2) =
+      let
+        val n1 = Seq.length sky1
+        val n2 = Seq.length sky2
+        fun optsL (x,y) => (x,y,L,NONE,NONE)
+        fun optsR (x,y) => (x,y,R,NONE,NONE)
+        val sky1opts = Seq.map optsL sky1
+        val sky2opts = Seq.map optsR sky2
+
+        fun comp ((x1,_,_,_,_),(x2,_,_,_,_)) = Int.compare(x1,x2)
+        val opts = Seq.merge comp (sky1opts,sky2opts)
+        fun copy ((x1,y1,side1,lopt1,ropt1),(x2,y2,side2,lopt2,ropt2)) =
+            case (side2) of
+                L => (x2,y2,side2,SOME(y2),ropt1)
+               |R => (x2,y2,side2,lopt1,SOME(y2))
+        val opts' = Seq.scanIncl copy (0,0,L,NONE,NONE) opts
+        fun cartesian (x,y,side,lopt,ropt) =
+            case (lopt,ropt) of
+                (SOME a, SOME b) => (x,Int.max(a,b))
+               |(SOME a, NONE) => (x,Int.max(a,y))
+               |(NONE, SOME a) => (x,Int.max(a,y))
+               |(_,_) => (x,y)
+        val unfiltered = Seq.map cartesian opts'
+        val l = Seq.length unfiltered
+        fun rm_duplicates (i,(x,y)) =
+            if ((i = 0) orelse (i = l)) then
+              true
+            else
+              let
+                val (_,y') = Seq.nth unfiltered (i - 1)
+              in
+                y <> y'
+              end
+      in
+        Seq.filterIdx rm_duplicates unfiltered
+      end
+
+
+end

@@ -1,0 +1,84 @@
+functor MkBridges(structure STSeq : ST_SEQUENCE)
+  :> BRIDGES where type 'a Seq.t = 'a STSeq.Seq.t and type vertex = int =
+struct
+  structure Table  = MkBSTTable(structure BST = MkTreap(structure Key = IntElt)
+                                structure Seq = STSeq.Seq)
+  structure Seq = STSeq.Seq
+
+  type vertex = int
+  type edge = vertex * vertex
+  type edges = edge Seq.t
+
+  type ugraph = (vertex Seq.t) Seq.t
+
+  (* The most expensive operation in makeGraph
+   * is computing eTable, which takes O(|E|log|V|) work
+   * and O(log^2(|V|)) span
+   *)
+  fun makeGraph (E : edges) : ugraph =
+      let
+        val revE = Seq.map (fn (x,y) => (y,x)) E
+        (* computing revE takes O(|E|) work, O(1) span*)
+        val fullE = Seq.append(E, revE)
+        (* computing fullE takes O(|E|) work, O(1) span *)
+        val eTable = Table.collect fullE
+      (* computing eTable takes O(|E|log|V| work, O(log^2(|V|)) span.
+       * This is because the result is an adjacency table, where the keys are
+       * vertices and the values are (not necessarily sorted) sequences of
+       * neighbors. It takes O(|E|) time to actually collect the edges
+       * into the appropriate sequences, and O(|E|log|V|) time to sort
+       * the keys.
+       *)
+        val S = Table.toSeq eTable (* O(|V|) *)
+      in
+        Seq.map (fn (x,S') => S') S (* O(|V|) *)
+      end
+
+  (* Generalized DFS with arrays from the textbook *)
+  fun gDFS (revisit,discover,finish) (G,S_0,s) =
+      let
+        fun DFS p ((t,X,S),v) =
+            if ((STSeq.nth X v) <> ~1)
+            then (t,X, revisit (S,X,v,p))
+            else
+              let
+                val X' = STSeq.update(X,(v,t+1))
+                val S' = discover (S,t)
+                val Ng = Seq.filter (fn i => i <> p) (Seq.nth G v)
+                val (t',X'',S'') = Seq.iterate (DFS v) (t+1,X',S') Ng
+                val S''' = finish (t,S, S'', v, p)
+              in
+                (t',X'',S''')
+              end
+        val X_0 = STSeq.fromSeq (Seq.tabulate (fn i => ~1) (Seq.length G))
+      in
+        #3(Seq.iterate (DFS s) (~1,X_0,S_0)
+                       (Seq.tabulate (fn i => i) (Seq.length G)))
+      end
+
+  fun findBridges (G : ugraph) : edges =
+      let
+        val n = Seq.length G
+        val S_0 = (~1, [])
+        (* minimum reachable vertex, list of bridges *)
+        val s = ~1
+        fun discover (S as (min,bridges),t) = (t+1, bridges)
+        fun revisit (S as (min,bridges),X,v,_) = (Int.min(STSeq.nth X v,min),
+                                                  bridges)
+        fun finish (t,S as (min,_),S'' as (min',bridges),v,p) =
+            (* min is the minimum reachable discover time from v! *)
+            (* if min > t+1, (p,v) is a bridge *)
+            if (min' > t)
+            then (Int.min(min,min'),(p,v)::bridges)
+            else
+              (* min <= p, we have a cycle! *)
+              (Int.min(min,min'),bridges)
+        val (_,bridges) = gDFS (revisit,discover,finish) (G,S_0,s)
+        val result = Seq.filter (fn (a,b) => a <> ~1) (Seq.fromList bridges)
+        fun pairString (a,b) = "("^Int.toString(a)^","^Int.toString(b)^")"
+        val () = print((Seq.toString pairString result)^"\n")
+      in
+        result
+      end
+
+end

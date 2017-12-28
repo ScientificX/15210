@@ -1,0 +1,27 @@
+structure Tests =
+struct
+  type unweightedEdge = int * int
+  type weightedEdge = int * int * int
+
+  (* Each test case is a tuple (w, edges, s, t) where `w` is a weight (for
+   * scoring -- you can just set this value at 1), `edges` is a list of edges of
+   * an enumerated graph, and s and t are two vertices. We verify correctness by
+   * checking that the following returns the correct value, using your functions
+   * from MkUnweightedASP.
+   *   report (makeASP (makeGraph (Seq.fromList edges)) s) t *)
+  val unweightedTests : (int * unweightedEdge list * int * int) list = [
+    (1, [(0,1)], 0, 1),
+    (1, [(0,1),(0,2),(1,3),(2,3),(3,0)], 0, 3),
+    (1, [(0,1),(1,2),(2,3),(1,3)], 0, 3),
+    (1, [(0,1),(0,2),(0,3),(1,3),(2,3),(2,4),(4,5),(3,5),(3,6),(6,5)],0,5)
+  ]
+
+  (* The following is identical to `unweightedTests`, except that each edge now
+   * has an associated weight, and we use your functions from MkWeightedASP. *)
+  val weightedTests : (int * weightedEdge list * int * int) list = [
+    (1, [(0,1,100)], 0, 1),
+    (1, [(0,1,5),(0,2,14),(1,3,10),(2,3,1),(3,0,1)], 0, 3),
+    (1, [(0,1,1),(1,2,1),(2,3,1),(1,3,1)], 0, 3)
+  ]
+
+end

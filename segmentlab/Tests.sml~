@@ -1,0 +1,30 @@
+structure Tests =
+struct
+
+  type vertex = int
+  type weight = int
+  type edge = vertex * vertex * weight
+
+  (* Each test case is a triple (w, edges, n), where `w` is a weight (for
+   * scoring; set this value to 1 and ignore), `edges` is a list of
+   * undirected weighted edges, and `n` is the number of vertices appearing in
+   * `edges`. Correctness will be verified by checking that the output of the
+   * following is a minimum spanning tree.
+   *
+   *   let
+   *     fun undirect E =
+   *       Seq.flatten (Seq.map (fn (u,v,w) => Seq.% [(u,v,w),(v,u,w)]) E)
+   *   in
+   *     segment (valOf Int.maxInt) (undirect (Seq.% edges), n)
+   *   end
+   *
+   * It is very important that you
+   *   (a) do not include "reverse" edges in the input (as you can see above,
+   *   we will include these automatically for autograding), and
+   *   (b) make sure the sum of all edge weights in an input graph is strictly
+   *   less than (valOf Int.maxInt). *)
+  val tests : (int * edge list * int) list = [
+    (1, [(0,2,10), (1,0,5)], 3)
+  ]
+  
+end

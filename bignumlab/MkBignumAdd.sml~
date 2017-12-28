@@ -1,0 +1,79 @@
+functor MkBignumAdd
+  (structure Seq : SEQUENCE
+   structure Bignum : BIGNUM where type t = Bit.t Seq.t) :>
+sig
+  val ++ : Bignum.t * Bignum.t -> Bignum.t
+end =
+struct
+
+  infix 6 ++
+
+  exception NotYetImplemented
+
+  fun printBit (a) = case a of
+                        Bit.ZERO => "0"
+                       |Bit.ONE => "1"
+
+  fun x ++ y =
+    let
+      val l = Int.max(Seq.length x, Seq.length y)
+      fun zeroPad (l : int) (x : Bit.t Seq.t) =
+          let
+            val x_length = Seq.length x
+            val diff = l - x_length
+          in
+            if diff < 0 then x
+            else
+              Seq.append (x,(Seq.tabulate (fn i => Bit.ZERO) diff))
+          end
+      val x' = zeroPad l x
+      val y' = zeroPad l y
+      fun carried (i, (a,b)) = (i,(a,b),false)
+      val pairs = Seq.map carried (Seq.enum(Seq.zip (x',y')))
+      (* oneBitAdd (index,(x,y),carried) => (index,(sum, carry),carried) *)
+      fun oneBitAdd (i,(a, b),t) =
+          let
+            val () = ()
+          (* print("oneBitAdd("^printBit(a)^","^printBit(b)^")\n")*)
+          in
+            case (a,b) of
+                (Bit.ZERO,Bit.ZERO) => (i,(Bit.ZERO,Bit.ZERO),t)
+               |(Bit.ZERO,Bit.ONE) => (i,(Bit.ONE,Bit.ZERO),t)
+               |(Bit.ONE,Bit.ZERO) => (i,(Bit.ONE,Bit.ZERO),t)
+               |(Bit.ONE,Bit.ONE) => (i,(Bit.ZERO,Bit.ONE),t)
+          end
+      val sumWithCarry = Seq.map oneBitAdd pairs
+      fun addOne (a,b) = case (a,b) of
+                             (Bit.ZERO,Bit.ZERO) => (Bit.ONE,Bit.ZERO)
+                            |(Bit.ZERO,Bit.ONE) => (Bit.ONE,Bit.ONE)
+                            |(Bit.ONE,Bit.ONE) => (Bit.ONE,Bit.ONE)
+                            |(Bit.ONE,Bit.ZERO) => (Bit.ZERO,Bit.ONE)
+      fun combine ((i1,(a1,b1),t1),(i2,(a2,b2),t2)) =
+          let
+            val (i,(a,b),t) = case (b1,t2) of
+                            (Bit.ZERO,_) => (i2,(a2,b2),t2)
+                           |(Bit.ONE,true) => (i2,(a2,b2),t2)
+                           |(Bit.ONE,false) => (i2,addOne(a2,b2),true)
+            val () = ()(*print("combine(("^Int.toString(i1)^",("^
+                                       printBit(a1)^","^printBit(b1)^")),("^
+                                       Int.toString(i2)^",("^
+                                       printBit(a2)^","^printBit(b2)^"))) = ("^
+                                       Int.toString(i)^",("^
+                                       printBit(a)^","^printBit(b)^"))\n")*)
+          in
+            (i,(a,b),t)
+          end
+      val carryPropagate = (Seq.scanIncl combine (0,(Bit.ZERO,Bit.ZERO),false)
+                                        sumWithCarry)
+      val extraBit = let
+                       val (_,(_,c),_) = Seq.nth carryPropagate (l-1)
+                     in
+                       Seq.singleton c
+                     end
+      fun fst (i,(a,b),t) = a
+      val filtered = Seq.append((Seq.map fst carryPropagate),extraBit)
+    in
+      Bignum.trim filtered
+    end
+
+end

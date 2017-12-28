@@ -1,0 +1,57 @@
+functor MkBignumSub
+  (structure Seq : SEQUENCE
+   structure Bignum : BIGNUM where type t = Bit.t Seq.t
+   val ++ : Bignum.t * Bignum.t -> Bignum.t) :>
+sig
+  val -- : Bignum.t * Bignum.t -> Bignum.t
+end =
+struct
+
+  infix 6 ++ --
+
+  exception NotYetImplemented
+
+  fun bitToString (b) = case b of
+                            Bit.ONE => "1"
+                          |Bit.ZERO => "0"
+
+  fun x -- y =
+      if (Seq.length y = 0) then x
+      else
+        let
+          val x_l = Seq.length x
+          val y_l = Seq.length y
+          fun zeroPad (l : int) (x : Bit.t Seq.t) =
+              let
+                val x_length = Seq.length x
+                val diff = l - x_length
+              in
+                if diff < 0 then x
+                else
+                  Seq.append (x,(Seq.tabulate (fn i => Bit.ZERO) diff))
+              end
+          fun flip (b) = case b of
+                             Bit.ZERO => Bit.ONE
+                            |Bit.ONE => Bit.ZERO
+          val neg_y = if (x_l < y_l)
+                      then
+                        ((Seq.map flip (zeroPad x_l y)) ++
+                          Seq.singleton(Bit.ONE))
+                      else
+                        ((Bignum.trim(Seq.map flip y)) ++
+                          Seq.singleton(Bit.ONE))
+          val () = print("neg_y = "^(Bignum.toString neg_y)^"\n")
+          val almost = x ++ neg_y
+          fun printOut (i : int) =
+              let
+                val b = Seq.nth almost i
+                val () = print(Int.toString(i)^"th value = "^bitToString(b)^"\n")
+              in
+                b
+              end
+          val result = (Seq.tabulate printOut (Seq.length x))
+        in
+          Bignum.trim result
+        end
+
+end

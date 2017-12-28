@@ -1,0 +1,60 @@
+  structure Tests =
+struct
+
+  type point = int * int
+  type box = (int * int) * (int * int)
+
+  fun randomTests seed max points tests =
+  let
+    val R = ref (DotMix.fromInt seed)
+    val generate = fn x => (R := DotMix.next (!R); DotMix.boundedInt (0, x) (!R))
+    val allpairs = ArraySequence.flatten (ArraySequence.tabulate (fn x => ArraySequence.tabulate (fn y => (x, y)) max) max)
+    fun genPoints n =
+      let
+        val pairs = ref allpairs
+        val res = ref []
+        fun genPoints' n =
+          if n = 0 then !res else
+          let
+            val (x,y) = ArraySequence.nth (!pairs) (generate (ArraySequence.length (!pairs)))
+          in
+            res := ((x,y), generate max) :: !res;
+            pairs := ArraySequence.filter (fn (x',y') => not (x = x' orelse y = y')) (!pairs);
+            genPoints' (n-1)
+          end
+      in
+        genPoints' n
+      end
+
+    fun genTests n =
+      let
+        val tests = ref []
+        fun genTests' n =
+          if n = 0 then !tests else
+          let
+            val xs = (generate max, generate max)
+            val ys = (generate max, generate max)
+            val newTest = (genPoints points, ((Int.min xs,Int.max ys),(Int.max xs,Int.min ys)))
+          in
+            tests := newTest :: (!tests);
+            genTests' (n-1)
+          end
+      in
+        genTests' n
+      end
+  in
+    genTests tests
+  end
+
+
+  (* Each value is ((x, y), w), with x, y coordinates in a 2D space and w the
+   * weight given to this point *)
+  val points1 = [((0,0),2),((1,2),5),((3,3),7),((4,4),3),((5,1),9)]
+
+  (* Each test is (points, box), where correctness is verified by calling
+   * (rangeSum (Seq.fromList points) box) and comparing it with the result of
+   * our reference solution. *)
+  val tests : ((point * int) list * box) list = [
+    (points1, ((1,3),(5,1)))
+  ]
+end

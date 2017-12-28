@@ -1,0 +1,52 @@
+functor MkFrogBridges(structure Seq : SEQUENCE) : FROGBRIDGES =
+struct
+  structure Seq = Seq
+  open Seq
+
+  structure SeqElt = MkSeqElt(structure Elt = MkPairElt(
+                                structure EltA = IntElt
+                                structure EltB = IntElt)
+                              structure Seq = Seq)
+
+  structure Memo = MkMemoizer(structure Argument =
+                             MkPairElt(
+                               structure EltA = SeqElt
+                               structure EltB = SeqElt))
+
+
+  type color = int
+  type village = int * color
+
+  fun maxBridges (L, R) =
+      let
+        (* first, sort the two sequences by x-coordinate *)
+        val sL = Seq.sort (fn ((a,_),(b,_)) => Int.compare(a,b)) L
+        val sR = Seq.sort (fn ((a,_),(b,_)) => Int.compare(a,b)) R
+        val maxBridges' =
+            Memo.memoize (fn findBridgesfn =>
+                             (fn (l,r) =>
+            if (((Seq.length l) = 0) orelse ((Seq.length r) = 0)) then 0
+            else
+              let
+                val (x,c) = Seq.nth l 0
+                val llen = Seq.length l
+                val rlen = Seq.length r
+                val idx = (Seq.iterate
+                               (fn (b,(i,(x',c'))) =>
+                                   case b of
+                                       SOME _ => b
+                                     | NONE => if (c = c') then SOME i
+                                               else NONE) NONE (Seq.enum r))
+                val l' = Seq.subseq l (1,llen-1)
+                val without = findBridgesfn(l',r)
+              in
+                case idx of
+                    NONE => without
+                  | SOME i => Int.max(without,
+                                   (1+findBridgesfn(l',Seq.subseq r (i,rlen-i))))
+              end))
+      in
+        maxBridges' (sL,sR)
+      end
+
+end

@@ -1,0 +1,83 @@
+functor MkUnweightedASP
+  (structure Table : TABLE)
+  :> UNWEIGHTED_ASP where type vertex = Table.Key.t and Seq = Table.Seq =
+struct
+  structure Seq = Table.Seq
+  structure Set = Table.Set
+
+  exception NotYetImplemented
+
+  type vertex = Table.Key.t
+  type edge = vertex * vertex
+
+  (* You must define the following two types *)
+  type graph = (Set.t Table.t) * (Set.t Table.t)
+  type asp = Set.t Table.t
+
+  fun makeGraph (E : edge Seq.t) : graph =
+      let
+        val flip = Seq.map (fn (a,b) => (b,a)) E
+        val outNeighbors = Table.collect E
+        val inNeighbors = Table.collect flip
+        val outNeighbors' = Table.map Set.fromSeq outNeighbors
+        val inNeighbors' = Table.map Set.fromSeq inNeighbors
+      in
+        (inNeighbors',outNeighbors')
+      end
+
+  fun makeASP (G as (inN,outN) : graph) (s : vertex) : asp =
+      let
+        fun makeASP' (F,X,A) =
+            if ((Set.size F) = 0) then A
+            else let
+              (* add the current frontier to the visited set *)
+              val X' = Set.union(X,F)
+              (* generate the next frontier *)
+              val F' = (Table.reduce Set.union (Set.empty())
+                                     (Table.restrict(outN,F)))
+              val Ng = Set.difference(F',X')
+            (* add the new frontier to A, each node is keyed by the
+             * intersection of the old frontier and its in-neighbors
+             *)
+              val Ng_inN = Table.restrict(inN,F')
+              val A' = (Table.union (fn (s1,s2) => s1)
+                                    (A,
+                                     Table.map (fn S => Set.intersection(S,F))
+                                              Ng_inN))
+            in
+              makeASP' (Ng,X',A')
+            end
+        val F_0 = Set.singleton s
+        val X_0 = Set.empty()
+        val A_0 = Table.singleton (s,Set.singleton(s))
+      in
+        makeASP' (F_0,X_0,A_0)
+      end
+
+  fun report (A : asp) (v : vertex) : vertex Seq.t Seq.t =
+      let
+        fun reportList ASPaths u =
+            case (Table.find ASPaths u) of
+                NONE => Seq.empty()
+               |SOME(p_set) =>
+                (* set of neighboring vertices on the shortest path from s
+                 * if p_set contains one element, and that element is v,
+                 * then return the sequence containing the sequence of just v*)
+                if ((Set.size(p_set) = 1) andalso (Set.find p_set u))
+                then Seq.singleton([u])
+                else
+                  let
+                    (* we haven't found our goal yet! *)
+                    val results = Seq.flatten (Seq.map (reportList ASPaths)
+                                                       (Set.toSeq p_set))
+                  in
+                    Seq.map (fn l => u::l) results
+                  end
+        val shortLists = reportList A v
+      in
+        Seq.map (Seq.rev o Seq.fromList) shortLists
+      end
+
+
+
+end

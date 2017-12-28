@@ -1,0 +1,90 @@
+structure RangeSum :> RANGE_SUM where Seq = ArraySequence =
+struct
+  structure Seq = ArraySequence
+
+  structure yVals = IntElt
+  structure xVals = IntElt
+  structure Weights =
+  struct
+  type t = int
+  val f : t*t -> t = op+
+  val I : t = 0
+  val toString:t -> string = Int.toString
+  end
+
+  exception NotYetImplemented
+
+
+
+  structure sweepLines = MkTreapAugTable(structure Key = xVals
+                                         structure Val = Weights)
+  structure yCoords = MkTreapTable(structure Key = yVals)
+
+  structure xWeights =
+  struct
+  type t = sweepLines.table
+  val f : t*t -> t = sweepLines.join
+  val I = sweepLines.empty()
+  val toString : t -> string = sweepLines.toString
+  end
+
+  type point = int * int
+
+  fun rangeSum S =
+      let
+        val yFirst = Seq.map (fn ((x,y),w) => (y,(x,w))) S
+
+        val ys = yCoords.collect (Seq.map (fn ((x,y),w) => (y,(x,w))) S)
+        val S' = yCoords.map (sweepLines.fromSeq) ys
+        val treapSeq = yCoords.toSeq S'
+        val f = fn (x,y) => y
+        val treapSeq' = (Seq.iteratePrefixesIncl
+           (fn ((y1,S1),(y2,S2)) => (y2,sweepLines.union f (S1,S2)))
+           (0,sweepLines.empty()) treapSeq)
+       (*every y value now points to a table of
+         all points with y value below and including it! *)
+        val treapTreap = yCoords.fromSeq treapSeq'
+      in
+        fn ((xLeft, yHi), (xRight, yLo)) =>
+           let
+             val bottom = case (yCoords.find treapTreap yLo) of
+                              NONE =>
+                              let
+                                val (T',_,_) = yCoords.split (treapTreap,yLo)
+                              in
+                                yCoords.last T'
+                              end
+                            | SOME T => yCoords.prev (treapTreap,yLo)
+             val top = case (yCoords.last (yCoords.getRange
+                                               treapTreap (yLo,yHi))) of
+                           NONE =>
+                           let
+                             val (T',_,_) = yCoords.split (treapTreap,yHi)
+                           in
+                             yCoords.last T'
+                           end
+                           | SOME (k,T) => SOME(k,T)
+             fun getxRange t_opt =
+                 case t_opt of
+                     NONE => NONE
+                   | SOME (k,T) => SOME(sweepLines.getRange T (xLeft,xRight))
+             val bot_r = getxRange bottom
+             val top_r = getxRange top
+             fun getArea t_opt =
+                 case t_opt of NONE => 0
+                             | SOME T => sweepLines.reduceVal T
+             val bot_area = getArea bot_r
+             val top_area = getArea top_r
+             (*val () = print("top values: "^sweepLines.toString(top)^"\n")
+             val () =
+                 case bot_r of
+                     NONE => print("No bottom values!\n")
+                   | SOME T => print("bottom values: "^sweepLines.toString(T)^"\n")
+             val () = print("top area = "^Int.toString(top_area)^"\n")
+             val () = print("bottom area = "^Int.toString(bot_area)^"\n")*)
+           in
+             top_area - bot_area
+           end
+      end
+
+end

@@ -1,0 +1,46 @@
+structure Tests :
+sig
+  structure Tree : BST
+  val searchTests : (int * (unit Tree.t * Tree.Key.t list)) list
+  val iterateTests : (int * unit Tree.t) list
+end =
+struct
+  structure Tree = MkCustomTree (structure Key = IntElt)
+
+  fun N (l, k, r) = Tree.joinMid (l, (k, ()), r)
+  val L : unit Tree.t = Tree.empty ()
+
+  (* These trees are not treaps. You can construct specific tree structures
+   * without worrying about priorities or rebalancing. Just make sure that your
+   * keys are in sorted order. Use N to make a node, and L to place a leaf. *)
+  val t1to7 : unit Tree.t =
+    N (N (N (L, 1, L), 2, N (L, 3, L)), 4, N (N (L, 5, L), 6, N (L, 7, L)))
+
+  val chain : unit Tree.t =
+    N (N (N (N (N (N (L, 1, L), 2, L), 3, L), 4, L), 5, L), 6, L)
+
+  (* Each search test is `(w, (t, ks))`, where `w` is a weight (for scoreing),
+   * `t` is a tree, and `ks` is a list of keys. Each test is run by constructing
+   * an initial finger with `root` then successively searching for each key in
+   * `ks` by using the previous resulting finger as a starting point until one
+   * of the calls returns `NONE` or we exhaust `ks`. We call `lift` throughout
+   * to verify that the current finger is pointing at the correct key. The test
+   * passes if all calls to `lift` yield the correct key, and if returning
+   * `NONE` was correct (if one of the calls returned `NONE`). *)
+  val searchTests : (int * (unit Tree.t * Tree.Key.t list)) list =
+  [
+    (1, (t1to7, [3, 5, 6])),
+    (1, (t1to7, [7, 1, 2, 7]))
+  ]
+
+  (* Each iterate test is `(w, t)` where `w` is a weight (for scoring) and `t`
+   * is a tree. Each test is run by constructing an initial finger with `first`
+   * then iterating through the tree with `next`. We call `lift` throughout to
+   * verify that the current finger is pointing at the correct key. The test
+   * passes if we see all keys in the tree in sorted order. *)
+  val iterateTests : (int * unit Tree.t) list =
+  [
+    (1, t1to7),
+    (1, chain)
+  ]
+end

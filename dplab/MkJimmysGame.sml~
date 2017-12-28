@@ -1,0 +1,66 @@
+functor MkJimmysGame(structure Seq : SEQUENCE) : JIMMYSGAME =
+struct
+  structure Seq = Seq
+  open Seq
+
+  structure SeqElt = MkSeqElt(structure Elt = IntElt
+                              structure Seq = Seq)
+
+  structure Memo = MkMemoizer(structure Argument =
+                             MkPairElt(
+                               structure EltA = IntElt
+                               structure EltB = SeqElt))
+
+  type rules = (int * (int * int)) seq
+  type target = int seq
+
+  (* base case for Int.min operations *)
+  val inf = Option.valOf(Int.maxInt)
+
+  fun splitAt S i = (Seq.take S i, Seq.drop S i)
+
+  fun maxOpt (x,y) = case (x,y) of
+                         (NONE,_) => NONE
+                        |(_,NONE) => NONE
+                        |(SOME(t1),SOME(t2)) => SOME(Int.max(t1,t2)+1)
+
+  fun minOpt (x,y) = case (x,y) of
+                        (SOME(t1),SOME(t2)) => SOME(Int.min(t1,t2))
+                       |(SOME(_),NONE) => x
+                       |(NONE,SOME(_)) => y
+                       |(NONE,NONE) => NONE
+
+  fun minSteps (init, S, R) =
+      let
+        val minSteps' =
+            Memo.memoize (fn MSfn =>
+                         (fn (init,S) =>
+            (* Base Case: check if S is a singleton *)
+            if (((Seq.length S)) = 1)
+            then (if ((Seq.nth S 0) = init) then (SOME 0)
+                  else NONE)
+            (* if the singleton contains init, then 0 steps are taken,
+             * otherwise if it doesn't, we can never reach our target *)
+            else
+              let
+                (* First, generate all pairs we can substitute for init *)
+                val pairMaps = (Seq.map (fn (x,(y,z)) => (y,z))
+                                (Seq.filter (fn (x,_) => (x = init)) R))
+                (* Generate a list of possible indices we can split S at *)
+                val splitIndices = (Seq.tabulate (fn i => i+1)
+                                                ((Seq.length S)-1))
+                (* Generate a sequence of possible splits of S into
+                 * front and back *)
+                val splitPairs = Seq.map (splitAt S) splitIndices
+                fun getMinSplits (x,y) =
+                    Seq.iterate minOpt NONE (Seq.map (fn (front,back) =>
+                    maxOpt(MSfn(x,front),MSfn(y,back))) splitPairs)
+                val mins = Seq.map getMinSplits pairMaps
+              in
+                Seq.iterate minOpt NONE mins
+              end))
+      in
+        minSteps'(init,S)
+      end
+
+end

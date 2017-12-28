@@ -1,0 +1,28 @@
+structure Tests =
+struct
+
+  structure Gen = MkCityGen (structure Seq = ArraySequence)
+  structure Seq = ArraySequence
+
+  fun handTestify bss = List.map (fn bs => (1, Seq.fromList bs)) bss
+  fun randTestify bss = Seq.toList (Seq.map (fn bs => (1, bs)) bss)
+
+  (* Each test is a list of buildings. Please add more. *)
+  val handTests = handTestify
+    [ [(1,1,2)]
+    , [(1,1,3),(2,1,4)]
+    , [(0,1,9),(1,3,6),(2,4,8),(3,2,5),(4,5,7)]
+    , [(4,5,20),(1,3,5),(2,4,6),(8,7,11),(12,11,13),(10,10,14),(17,2,21)]
+    , [(20,10000,90000)]
+    ]
+
+  (* Feel free to change these parameters to generate more random tests *)
+  val numTests = 0
+  val maxSize = 10
+  val seed = 15210
+  val randTests = randTestify (Gen.cities numTests maxSize seed)
+
+  (* Please don't touch this *)
+  val tests = handTests @ randTests
+
+end

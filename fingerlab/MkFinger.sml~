@@ -1,0 +1,160 @@
+functor MkFinger (structure Tree : BST) :> FINGER where Tree = Tree =
+struct
+  structure Tree = Tree
+  structure Seq = ArraySequence
+
+  exception NotYetImplemented
+
+  type range = Tree.Key.t option
+
+  (* Redefine this first... *)
+  type 'a finger = ('a Tree.view *
+                   (range * range) *
+                   (('a Tree.view * (range * range)) Seq.t))
+
+  (* ... but don't touch this. *)
+  type 'a t = 'a finger
+
+  fun lift f =
+      let
+        val (v,_,_) = f
+      in
+        case v of
+            Tree.LEAF => raise Fail "Fingers shouldn't point at leaves!"
+           |Tree.NODE(R) => (#key(R),#value(R))
+      end
+
+  fun root t = case (Tree.expose t) of
+                   Tree.LEAF => NONE
+                  |Tree.NODE(R) => SOME (Tree.NODE(R),(NONE,NONE),Seq.empty())
+
+  fun searchFrom f k =
+      let
+        val (v,(k1,k2),S) = f
+      in
+        case v of
+            Tree.LEAF => raise Fail "Fingers shouldn't point at leaves!"
+           |Tree.NODE(R) =>
+        if (Tree.Key.equal(k,#key(R))) then SOME(f)
+        else
+          let
+            val newl = (Seq.length S) + 1
+            val newSeq = Seq.tabulate (fn i =>
+                                          if (i=0) then (v,(k1,k2))
+                                          else Seq.nth S (i-1)) newl
+            val lroot = root (#left(R))
+            val rroot = root (#right(R))
+            fun lookDown () = (case (Tree.Key.compare(k,#key(R))) of
+                                   LESS => (case (lroot) of
+                                               NONE => NONE
+                                             |SOME(lv,_,_) =>
+                                              (let
+                                                val lFinger = (lv,(k1,SOME(#key(R))),newSeq)
+                                              in
+                                                searchFrom lFinger k
+                                              end))
+                                  |_ => (case (rroot) of
+                                            NONE => NONE
+                                           |SOME(rv,_,_) =>
+                                            (let
+                                              val rFinger = (rv,(SOME(#key(R)),k2),newSeq)
+                                            in
+                                              searchFrom rFinger k
+                                            end)))
+            fun lookUp () =
+                let
+                  val (v',(k1',k2')) = Seq.nth S 0
+                  val pSeq = (Seq.tabulate
+                                     (fn i => Seq.nth S (i+1))
+                                     ((Seq.length S) -1))
+                  val parent = (v',(k1',k2'),pSeq)
+                in
+                  searchFrom parent k
+                end
+          in
+            case (k1,k2) of
+                (SOME(k1'),SOME(k2')) =>
+                (case (Tree.Key.compare(k,k1'),Tree.Key.compare(k,k2')) of
+                     (GREATER,LESS) => lookDown ()
+                    |_ => lookUp ())
+               |(SOME(k1'),NONE) => (case (Tree.Key.compare(k,k1')) of
+                                         GREATER => lookDown ()
+                                        |_ => lookUp ())
+               |(NONE,SOME(k2')) => (case (Tree.Key.compare(k,k2')) of
+                                         LESS => lookDown ()
+                                        |_ => lookUp ())
+               |(NONE,NONE) => lookDown ()
+          end
+      end
+
+  fun first t =
+      case (Tree.expose t) of
+          Tree.LEAF => NONE
+         |Tree.NODE(R) =>
+          let
+            val v = Tree.NODE(R)
+            val f = (v,(NONE,NONE),Seq.empty())
+          in
+            case (first (#left(R))) of
+                NONE => SOME(f)
+               |SOME((v',(k1,k2),S)) =>
+                     let
+                       val L = Seq.length S
+                       val currNode = Seq.singleton (v,(NONE,NONE))
+                       val newSeq = Seq.append(S,currNode)
+                     in
+                       if (L=0) then
+                         SOME((v',(k1,SOME(#key(R))),newSeq))
+                       else
+                         SOME((v',(k1,k2),newSeq))
+                     end
+          end
+
+  (* look_up f evaluates to SOME(f'), where f' is the first ancestor with a higher
+   * key than k, or NONE if such an ancestor does not exist*)
+  fun look_up f k =
+      let
+        val(v,(k1,k2),S) = f
+      in
+        case (v) of
+            Tree.LEAF => raise Fail "Fingers shouldn't point at Leaves!"
+           |Tree.NODE(R) =>
+        case (Tree.Key.compare(k,(#key(R)))) of
+                 LESS => SOME f
+                |_ =>
+        if ((Seq.length S) = 0) then NONE
+        else
+          let
+            val (v',(k1',k2'))= Seq.nth S 0
+            val f' = (v',(k1',k2'),
+                      Seq.tabulate (fn i =>
+                                       Seq.nth S (i+1)) ((Seq.length S)-1))
+          in
+            look_up f' k
+          end
+      end
+
+  fun next f =
+      let
+        val (v,(k1,k2),S) = f
+      in
+        case (v) of
+            Tree.LEAF => raise Fail "Fingers shouldn't point at Leaves!"
+           |Tree.NODE(R) =>
+        case (Tree.expose(#right(R))) of
+            Tree.LEAF => (case (k2) of
+                              NONE => NONE
+                             |_ => look_up f (#key(R)))
+           |_ =>
+            let
+              val (v',(k1',k2'),S') = Option.valOf(first (#right(R)))
+              val currNode = Seq.singleton (v,(k1,k2))
+              val Seq1 = Seq.append(S',currNode)
+              val newSeq = Seq.append(Seq1,S)
+            in
+              SOME((v',(SOME(#key(R)),k2'),newSeq))
+            end
+
+      end
+
+end

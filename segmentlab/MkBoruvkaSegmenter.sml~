@@ -1,0 +1,134 @@
+functor MkBoruvkaSegmenter
+  (structure Seq : SEQUENCE
+   structure Rand : RANDOM210)
+  :> SEGMENTER where Seq = Seq =
+struct
+  structure Seq = Seq
+
+  type vertex = int
+  type weight = int
+  type edge = vertex * vertex * weight
+
+  exception NotYetImplemented
+  (* Remove this when completed *)
+
+  fun flipCoins n r =
+      let
+        val (r', chooseSeed) = Rand.splitTab(r,n)
+      in
+        (r',Seq.tabulate (Rand.bool o chooseSeed) n)
+      end
+
+  fun vertexJoiners E =
+      let
+        val sorted = Seq.collect Int.compare E
+        (* the ith index of sorted contains (i,S), where
+         * S is the sequence of (neighbor,weight,label) tuples corresponding
+         * to each neighbor of vertex i *)
+        val inf = Option.valOf(Int.maxInt)
+        fun getMin (u,S) =
+            (u,(Seq.reduce (fn ((v1,w1,l1),(v2,w2,l2)) => if (w1 <= w2)
+                                                          then (v1,w1,l1)
+                                                          else (v2,w2,l2))
+                        (inf,inf,(inf,inf,inf))  S))
+        in
+          Seq.filter (fn (u,(v,w,l)) => (u <> inf))
+                     ((Seq.map getMin) sorted)
+        end
+
+  fun joinerStarContract(G as (V,E),n,r) =
+      let
+        val minE = vertexJoiners E
+        (* minE is a sequence of (source,(dest,weight,label))
+         * sorted by source *)
+        fun justSources seq = Seq.map (fn (u,_) => u) seq
+        val (r',HnT) = flipCoins n r
+        val P = (Seq.filter (fn (u,(v,w,l)) =>
+                                (not (Seq.nth HnT u)) andalso
+                                                      (Seq.nth HnT v)) minE)
+        val V' = justSources (Seq.filter (fn (u,(v,w,l)) =>
+                                   (Seq.nth HnT u) orelse
+                                   not (Seq.nth HnT v)) minE)
+      in
+        (V',P,r')
+      end
+
+  fun segment initialCredit (E, n) =
+      let
+        val credits0 = Seq.tabulate (fn i => initialCredit) n
+        fun addLabels (u,v,w) =
+            (u,(v,w,(u,v,w)))
+        val E0 = Seq.map addLabels E
+        val V0 = Seq.map (fn (u,_) => u) (Seq.collect Int.compare E0)
+        (* V0 is a sorted sequence of vertices from 0-(n-1) *)
+        fun MST' (G as (V,E),T,credits,r) =
+            if ((Seq.length E) = 0) then T
+             else
+               (let
+                 val (V',PT,r') = joinerStarContract(G,n,r)
+                 (* both V' and PT should be sorted sequences *)
+                 val PT' = Seq.map (fn (u,(v,w,_)) => (u,v)) PT
+
+                 val V'' = Seq.map (fn v => (v,v)) V'
+
+                 val P = Seq.merge (fn ((u1,_),(u2,_)) =>
+                                       Int.compare(u1,u2)) (PT',V'')
+
+                 val T' = Seq.append(T,(Seq.map (fn (u,(v,w,l)) => l) PT))
+
+                 val toContract =
+                     (Seq.collect Int.compare
+                          (Seq.map (fn (u,(v,w,l)) => (v,(u,w)) ) PT))
+                 (* to Contract: <(v,<(u1,w1),(u2,w2)>)
+                  * it's a sequence of center vertices and the sequence of
+                  * satellites to be contracted along with their weights
+                  *)
+
+                 fun sumWeights uwSeq =
+                     Seq.iterate (fn (pSum,(u,w)) => pSum+w) 0 uwSeq
+
+                 fun newScore (v,targetVSeq) =
+                     let
+                       val c0 = Seq.nth credits v
+                       val sum = sumWeights targetVSeq
+                     in
+                       (v,c0 - sum)
+                     end
+                 val updates = Seq.map newScore toContract
+                 val credits' = (Seq.inject (credits, updates))
+                 val padding = Seq.inject ((Seq.tabulate (fn i => ~1) n),
+                                           P)
+                 fun newEdges (u,(v,w,l)) =
+                     let
+                       val u' = Seq.nth padding u
+                       val v' = Seq.nth padding v
+                     in
+                       (u',(v',w,l))
+                     end
+                 val E' = (Seq.filter (fn (u,(v,_,_)) => u <> v)
+                                      (Seq.map newEdges E))
+
+                 (* E' is a sequence of edges using only centers that
+                  * have been contracted into as sources and targets *)
+
+                 fun weightCheck (u,(v,w,_)) =
+                     let
+                       val w1 = Seq.nth credits u
+                       val w2 = Seq.nth credits v
+                     in
+                       (w1 >= w) andalso (w2 >= w)
+                     end
+
+                 val E'' = Seq.filter weightCheck E'
+                 (* Make sure that we don't have any edges that could make
+                  * credits go negative! *)
+
+               in
+                 MST'((V',E''),T',credits,r')
+               end)
+
+      in
+        MST'((V0,E0),Seq.empty(),credits0,Rand.fromInt(15150))
+      end
+
+end

@@ -1,0 +1,76 @@
+functor MkWeightedASP
+  (structure Table : TABLE
+   structure PQ : PQ where type Key.t = int)
+  :> WEIGHTED_ASP where type vertex = Table.Key.t and Seq = Table.Seq =
+struct
+
+  structure Seq = Table.Seq
+  structure Set = Table.Set
+
+  exception NotYetImplemented
+
+  type vertex = Table.Key.t
+  type edge = vertex * vertex * int
+
+  (* You must define the following two types *)
+  type graph = int Table.t Table.t
+  type asp = Set.t Table.t
+
+  fun makeGraph (E : edge Seq.t) : graph =
+      let
+        val out = Seq.map (fn (a,b,w) => (a,(b,w))) E
+        val outNeighbors = Table.collect out
+      in
+        Table.map Table.fromSeq outNeighbors
+      end
+
+  fun makeASP (G : graph) (s : vertex) : asp =
+      let
+        fun dijkstra (X,Q,A) =
+            case (PQ.deleteMin(Q)) of
+                (NONE,_) => A
+               |(SOME(d,(p,v)),Q') =>
+                if (Set.find X v) then dijkstra(X,Q',A)
+                else let
+                  val X' = Set.insert(X,v)
+                  fun relax (queue,(u,w)) = PQ.insert(queue,(d+w,(v,u)))
+                  val F' = Option.valOf (Table.find G v)
+                  val Ng = (Table.mapKey (fn (v,w) => (v,w))
+                                        Table.difference(F',X'))
+                  val Q'' = Table.iterate relax Q' Ng
+                  val A' = Table.insert(A,(v,p))
+                in
+                  dijkstra(X',Q'',A')
+                end
+        val X_0 = Set.empty()
+        val Q_0 = PQ.insert(PQ.empty(),(0,(s,s)))
+        val A_0 = Table.singleton(s,Set.singleton(s))
+      in
+        dijkstra (X_0,Q_0,A_0)
+      end
+
+  fun report (A : asp) (v : vertex) : vertex Seq.t Seq.t =
+      let
+        fun reportList ASPaths u =
+            case (Table.find ASPaths u) of
+                NONE => Seq.empty()
+               |SOME(p_set) =>
+                (* set of neighboring vertices on the shortest path from s
+                 * if p_set contains one element, and that element is v,
+                 * then return the sequence containing the sequence of just v*)
+                if ((Set.size(p_set) = 1) andalso (Set.find p_set u))
+                then Seq.singleton([u])
+                else
+                  let
+                    (* we haven't found our goal yet! *)
+                    val results = Seq.flatten (Seq.map (reportList ASPaths)
+                                                       (Set.toSeq p_set))
+                  in
+                    Seq.map (fn l => u::l) results
+                  end
+        val shortLists = reportList A v
+      in
+        Seq.map (Seq.rev o Seq.fromList) shortLists
+      end
+
+end

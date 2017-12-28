@@ -1,0 +1,207 @@
+functor MkSkyline (structure Seq : SEQUENCE)
+  :> SKYLINE where type skyline = (int * int) Seq.t =
+struct
+
+  type skyline = (int * int) Seq.t
+
+  datatype align = L | R
+
+  fun alignToString(L) = "L"
+     |alignToString(R) = "R"
+
+  fun optToString (opt : int option) : string = case opt of
+                              NONE => "NONE"
+                             |SOME x => "SOME "^Int.toString(x)
+
+  exception NotYetImplemented
+
+  fun singleton (l, h, r) =
+    let
+      fun tab_fun 0 = (l,h)
+         |tab_fun _ = (r,0)
+    in
+      Seq.tabulate tab_fun 2
+    end
+
+  fun combine (sky1, sky2) =
+      let
+        fun optsL (x,y) = (x,y,L,SOME y)
+        fun nonesL (x,y) = (x,y,L,NONE)
+        fun optsR (x,y) = (x,y,R,SOME y)
+        fun nonesR (x,y) = (x,y,R,NONE)
+        val sky1optsL = Seq.map optsL sky1
+        val sky1optsR = Seq.map nonesL sky1
+        val sky2optsL = Seq.map nonesR sky2
+        val sky2optsR = Seq.map optsR sky2
+        fun comp ((x1,_,_,_),(x2,_,_,_)) = Int.compare(x1,x2)
+        val optsL = Seq.merge comp (sky1optsL,sky2optsL)
+        val optsR = Seq.merge comp (sky1optsR,sky2optsR)
+        fun copyL ((x1,y1,side1,opt1),(x2,y2,side2,opt2)) =
+            let
+              val (x,y,side,opt) = case (opt2) of
+                                             SOME _ => (x2,y2,side2,opt2)
+                                            |NONE => (x2,y2,side2,opt1)
+              val () = print("copy(("^Int.toString(x1)^","^
+                             Int.toString(y1)^","^
+                             alignToString(side1)^","^
+                             optToString(opt1)^"),("^
+                             Int.toString(x2)^","^
+                             Int.toString(y2)^","^
+                             alignToString(side2)^","^
+                             optToString(opt2)^")) = ("^
+                             Int.toString(x)^","^
+                             Int.toString(y)^","^
+                             alignToString(side)^","^
+                             optToString(opt)^")\n ")
+            in
+              (x,y,side,opt)
+            end
+        fun copyR ((x1,y1,side1,opt1),(x2,y2,side2,opt2)) =
+let
+              val (x,y,side,opt) = case (opt2) of
+                                       NONE => (x2,y2,side2,opt1)
+                                      |SOME _ => (x2,y2,side2,opt2)
+              val () = print("copy(("^Int.toString(x1)^","^
+                             Int.toString(y1)^","^
+                             alignToString(side1)^","^
+                             optToString(opt1)^"),("^
+                             Int.toString(x2)^","^
+                             Int.toString(y2)^","^
+                             alignToString(side2)^","^
+                             optToString(opt2)^")) = ("^
+                             Int.toString(x)^","^
+                             Int.toString(y)^","^
+                             alignToString(side)^","^
+                             optToString(opt)^")\n ")
+            in
+              (x,y,side,opt)
+            end
+        val optsL = Seq.scanIncl copyL (0,0,R,NONE) optsL
+        val () = print("-- LEFT SIDE FINISHED --\n")
+        val optsR = Seq.scanIncl copyR (0,0,L,NONE) optsR
+        val () = print("-- RIGHT SIDE FINISHED --\n")
+        fun zip ((x1,y1,side1,opt1),(x2,y2,side2,opt2)) =
+            let
+              val result = (x1,y1,side1,opt1,opt2)
+              val () = print("zip(("^Int.toString(x1)^","^
+                             Int.toString(y1)^","^
+                             alignToString(side1)^","^
+                             optToString(opt1)^","^
+                             optToString(opt2)^")\n ")
+            in
+              (x1,y1,side1,opt1,opt2)
+            end
+        val combined = Seq.zipWith zip (optsL,optsR)
+        fun cartesian (x,y,side,lopt,ropt) =
+            case (lopt,ropt) of
+                (SOME a, SOME b) => (x,Int.max(a,b))
+               |(SOME a, NONE) => (x,Int.max(a,y))
+               |(NONE, SOME a) => (x,Int.max(a,y))
+               |(_,_) => (x,y)
+        val unfiltered = Seq.map cartesian combined
+        val l = Seq.length unfiltered
+        fun rm_duplicates (i,(x,y)) =
+            if ((i = 0) orelse (i = l - 1)) then
+              true
+            else if ((i = (l - 2)) andalso (y = 0)) then
+              false
+            else
+              let
+                val (_,y') = Seq.nth unfiltered (i - 1)
+              in
+                y <> y'
+              end
+      in
+        Seq.filterIdx rm_duplicates unfiltered
+      end
+
+
+
+      (*let
+        val n1 = Seq.length sky1
+        val n2 = Seq.length sky2
+        fun lKeepL (x,y) = (x,y,L,SOME y)
+        fun lKeepR (x,y) = (x,y,L,NONE)
+        fun rKeepL (x,y) = (x,y,R,NONE)
+        fun rKeepR (x,y) = (x,y,R,SOME y)
+        val (skylKeepL, skyrKeepL) = (Seq.map lKeepL sky1, Seq.map rKeepL sky2)
+        val (skylKeepR, skyrKeepR) = (Seq.map lKeepR sky1, Seq.map rKeepR sky2)
+        fun comp ((x1,_,_,_),(x2,_,_,_)) = Int.compare(x1,x2)
+        val allPointsKeepL = Seq.merge comp (skylKeepL,skyrKeepL)
+        val allPointsKeepR = Seq.merge comp (skylKeepR,skyrKeepR)
+        fun combineKeepL ((x1,y1,side1,opt1),(x2,y2,side2,opt2)) =
+            let
+              val (x,y,side,opt) =
+                  case (side1,side2) of
+                      (L,L) => (x2,y2,L,opt2)
+                     |(R,R) => (x2,y2,R,opt2)
+                     |(L,R) => (x2,y2,R,opt1)
+                     |(R,L) => (x2,y2,L,opt2)
+              val () = print("combine(("^Int.toString(x1)^","^
+                             Int.toString(y1)^","^
+                             alignToString(side1)^","^
+                             optToString(opt1)^"),("^
+                             Int.toString(x2)^","^
+                             Int.toString(y2)^","^
+                             alignToString(side2)^","^
+                             optToString(opt2)^")) = ("^
+                             Int.toString(x)^","^
+                             Int.toString(y)^","^
+                             alignToString(side)^","^
+                             optToString(opt)^")\n ")
+            in
+              (x,y,side,opt)
+            end
+        fun combineKeepR ((x1,y1,side1,opt1),(x2,y2,side2,opt2)) =
+            case (side1,side2) of
+                (L,L) => (x2,y2,L,opt2)
+               (*(case (opt1, opt2) of
+                             (SOME x, NONE) => (x2,y2,L,opt1)
+                            |(_,_) => (x2,y2,L,opt2))*)
+               |(R,R) => (x2,y2,R,opt2)
+               |(L,R) => (x2,y2,R,opt2)
+               |(R,L) => (x2,y2,L,opt1)
+        val identity = (0,0,L,NONE)
+        val combinedKeepL = Seq.scanIncl combineKeepL (0,0,R,NONE) allPointsKeepL
+        val () = print("LEFT SIDE DONE\n")
+        val combinedKeepR = Seq.scanIncl combineKeepR (0,0,R,NONE) (Seq.rev allPointsKeepR)
+        (*Seq.scanIncl combineKeepR (0,0,L,NONE) allPointsKeepR*)
+        fun genCombined (i : int) =
+            let
+              val (x,y,side,optL) = Seq.nth combinedKeepL i
+              val (_,_,_,optR) = Seq.nth (Seq.rev combinedKeepR) i
+              val (a,b,_,opt) = case (optL, optR) of
+                                    (NONE,SOME a) => (x,y,side,SOME a)
+                                   |(SOME a, SOME b) => (x,y,side,SOME(Int.max(a,b)))
+                                   |_ => (x,y,side,optL)
+              val () = case opt of
+                           NONE => ()
+                          |SOME z => print("("^Int.toString(x)^","^
+                                           Int.toString(y)^","^
+                                           alignToString(side)^","^
+                                           optToString(opt)^")\n")
+            in
+              (a,b,side,opt)
+            end
+        val combined = Seq.tabulate genCombined (Seq.length allPointsKeepL)
+        fun cartesian (x,y,side,opt) =
+            case (opt) of
+                NONE => (x,y)
+               |SOME z => (x,Int.max(y,z))
+        val filtered = Seq.map cartesian combined
+        fun dup_check (i,(x, y)) : bool =
+            if ((i = 0) orelse (i = Seq.length filtered -1))
+            then true
+            else if (i = (Seq.length filtered - 2) andalso (y=0))
+            then false
+            else
+              let
+                val (_,y') = Seq.nth filtered (i-1)
+              in
+                y <> y'
+              end
+      in
+        Seq.filterIdx dup_check filtered
+      end*)
+
+end

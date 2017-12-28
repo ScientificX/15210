@@ -1,0 +1,149 @@
+functor MkDivideAndConquerPD (structure Seq : SEQUENCE_RESTRICTED)
+  :> PAREN_DIST where type 'a seq = 'a Seq.t =
+struct
+  type 'a seq = 'a Seq.t
+
+  exception NotYetImplemented
+
+  fun parenMatch (s : (Paren.t Seq.t)) : bool =
+      let
+        fun parenMatch' s =
+            case Seq.splitMid s of
+                Seq.EMPTY => (0, 0)
+               |Seq.ONE Paren.L => (0, 1)
+               |Seq.ONE Paren.R => (1, 0)
+               |Seq.PAIR (A,B) =>
+                let
+                  val ((i,j),(k,l)) =
+                      Primitives.par(fn () => parenMatch' A,
+                                     fn () => parenMatch' B)
+                in
+                  if (j <= k) then (i+k-j, l) else (i, l+j-k)
+                end
+      in
+        parenMatch' s = (0,0)
+      end
+
+  fun parenDist' (parens : Paren.t Seq.t) =
+      case (Seq.splitMid parens) of
+          Seq.EMPTY => ((SOME 0),(SOME 0),(0,0),(~1,~1))
+         |Seq.ONE Paren.L => (NONE, NONE, (1,0), (0,~1))
+         |Seq.ONE Paren.R => (NONE, NONE, (0,1), (~1,0))
+         |Seq.PAIR (l,r) =>
+          let
+            val ((mdp1,mdp1',(lNum1,rNum1),(lInd1,rInd1)),
+                 (mdp2,mdp2',(lNum2,rNum2),(lInd2,rInd2))) =
+                (Primitives.par (fn () => parenDist' l,
+                                 fn () => parenDist' r))
+            val lLength = Seq.length l
+            val rLength = Seq.length r
+          in
+            case (mdp1, mdp2) of
+                (SOME x, SOME y) => (SOME(Int.max(x,y)),
+                                    (SOME(Int.max(x,y))),
+                                     (lNum1+lNum2,rNum1+rNum2),
+                                     (lInd1,rInd1+lLength))
+               |(SOME x, NONE) => (case (lInd2,rInd2) of
+                                      (~1,_) => (NONE, NONE,(lNum2,rNum2),
+                                                  (lInd2,rInd2+lLength))
+                                     |(_,~1) => (NONE, NONE,(lNum2,rNum2),
+                                                  (lInd2+lLength,rInd2))
+                                     |(_,_) => (NONE,NONE,(lNum2,rNum2),
+                                                (lInd2+lLength,rInd2+lLength)))
+               |(NONE, SOME y) => (NONE,NONE,(lNum1,rNum1),
+                                        (lInd1,rInd1))
+               |(NONE, NONE) =>
+                if ((lNum1 = rNum2) andalso (rNum1 = 0) andalso (lNum2 = 0))
+                then
+                  case (mdp1',mdp2') of
+                      (NONE,NONE) => (SOME (rInd2+lLength-lInd1-1),NONE,(0,0),
+                      (~1,~1))
+                     |(SOME x,NONE) => (SOME(Int.max(
+                                            (rInd2+lLength-lInd1-1),x)),
+                                        SOME(Int.max(
+                                            (rInd2+lLength-lInd1-1),x)),
+                                        (0,0),(~1,~1))
+                     |(NONE,SOME x) => (SOME(Int.max(
+                                            (rInd2+lLength-lInd1-1),x)),
+                                        SOME(Int.max(
+                                            (rInd2+lLength-lInd1-1),x)),
+                                        (0,0),(~1,~1))
+                     |(SOME x, SOME y) => let
+                       val max1 = Int.max(x,y)
+                       val max2 = Int.max(max1,(rInd2+lLength-lInd1-1))
+                     in
+                       (SOME max2,SOME max2,(0,0),(~1,~1))
+                     end
+                   else
+                     let
+                       val newlNum = (case (rNum2,lNum1,(lNum1 >= rNum2)) of
+                                         (0,0,_) => lNum2
+                                        |(0,_,_) => (lNum1 + lNum2)
+                                        |(_,0,_) => lNum2
+                                        |(_,_,true) => lNum1+lNum2-rNum2
+                                        |(_,_,false) => lNum2)
+                       val newrNum = (case (rNum2,lNum1,(lNum1 >= rNum2)) of
+                                         (0,0,_) => rNum1
+                                        |(0,_,_) => rNum1
+                                        |(_,0,_) => (rNum1+rNum2)
+                                        |(_,_,true) => rNum1
+                                        |(_,_,false) => rNum1+rNum2-lNum1)
+                       val newlInd = (case (lInd1,lInd2,(newlNum=0)) of
+                                          (~1,~1,_) => ~1
+                                         |(~1,_,_) => (lInd2+lLength)
+                                         |(_,_,true) => ~1
+                                         |(_,_,false) =>
+                                          (if (newlNum > lNum2) then
+                                              lInd1
+                                           else
+                                              lInd2+lLength))
+                       val newrInd = (case (rInd1,rInd2,(newrNum=0)) of
+                                          (~1,~1,_) => ~1
+                                         |(_,~1,_) => rInd1
+                                         |(_,_,true) => ~1
+                                         |(_,_,false) =>
+                                          (if (newrNum > rNum1) then
+                                             rInd2+lLength
+                                           else
+                                             rInd1))
+                       val newmdp' = let
+                         val lIndCond1 = ((newlInd = lInd1) andalso
+                                         (lInd1 < (lLength -2)))
+                         val lIndCond2 = newlInd > (lLength + 1)
+                         val lIndCond = lIndCond1 orelse lIndCond2
+                         val rIndCond1 = ((newrInd = rInd1) andalso
+                                         (rInd1 < (rLength -2)))
+                         val rIndCond2 = newrInd > (lLength + 1)
+                         val rIndCond = rIndCond1 orelse rIndCond2
+                         val parenCond = lIndCond andalso rIndCond
+                         val numMatched = (lNum1+lNum2) - newlNum
+                         val newD = numMatched - 2;
+                         val distCond = newD >= 2
+                         val cond = parenCond andalso distCond
+                       in
+                         if cond then (SOME newD) else
+                         case (mdp1',mdp1') of
+                             (NONE,NONE) => NONE
+                            |(SOME x,NONE) => SOME x
+                            |(NONE, SOME x) => SOME x
+                            |(SOME x,SOME y) => SOME(Int.max(x,y))
+                       end
+                     in
+                       (NONE,newmdp',(newlNum,newrNum),(newlInd,newrInd))
+                     end
+          end
+
+  fun parenDist (parens : Paren.t Seq.t) : int option =
+      if (parenMatch parens) then
+        (let
+          val (mdp, mdp',(lNum, rNum), (lInd, rInd)) = parenDist' parens
+          (*val () = print("lNum = " ^ Int.toString(lNum) ^
+                         ", rNum = " ^ Int.toString(rNum) ^
+                         ", lInd  = " ^ Int.toString(lInd) ^
+                         ", rInd  = " ^ Int.toString(rInd) ^ "\n")*)
+        in
+          mdp
+        end)
+      else NONE
+
+end

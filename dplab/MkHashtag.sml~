@@ -1,0 +1,49 @@
+functor MkHashtag(structure Seq : SEQUENCE
+                  structure Dict : DICTIONARY) : HASHTAG =
+struct
+  structure Seq = Seq
+  open Seq
+  structure Dict = Dict
+  open Dict
+
+  structure Memo = MkMemoizer(structure Argument = StringElt)
+
+  fun isValidHashtag S =
+      let
+        val isValid' = Memo.memoize
+            (fn isvalidfn =>
+                (fn S =>
+                    let
+                      fun isValid (S,i) =
+                          (if ((size S) = 0) then false
+                           else if isWord(S) then true
+                           else if ((size S) = 1) then false
+                           else
+                             let
+                               val len = size S
+                               fun firstTry j =
+                                   if (len <= j) then ~1
+                                   else if (isWord(substring(S,0,j))) then j
+                                   else firstTry (j+1)
+                               val index = firstTry (i+1)
+                               val subOne = if (index > ~1)
+                                            then substring(S,0,index)
+                                            else "<jk didn't find one>"
+                               val () = print("Found word: "^subOne^", now ")
+                               val subTwo = if (index > ~1)
+                                            then substring(S,index,(len-index))
+                                            else "<failed index!>"
+                               val () = print("trying substring: "^subTwo^"\n")
+                             in
+                               ((index > ~1) andalso
+                                (isValid(substring(S,index,(len-index)),0)
+                               orelse isValid(S,index)))
+                              end)
+                    in
+                      isValid(S,0)
+                    end))
+      in
+        isValid' S
+      end
+
+end

@@ -1,0 +1,3 @@
+structure STSeq = MkSTSequence(ArraySequence)
+
+structure Seq = STSeq.Seq

@@ -1,0 +1,228 @@
+functor MkBruteForcePD (structure Seq : SEQUENCE)
+  :> PAREN_DIST where type 'a seq = 'a Seq.t =
+struct
+  type 'a seq = 'a Seq.t
+
+  exception NotYetImplemented
+
+  (* subSeqs' : 'a Seq.t -> int -> 'a Seq.t Seq.t
+   * REQUIRES: n <= (Seq.length s)
+   * ENSURES: subSeqs' s n generates a sequence of all sub-sequences of
+   *          length n in s
+   *)
+
+  fun subSeqs' (s : 'a Seq.t) (n : int) : 'a Seq.t Seq.t =
+      let
+        val l = Seq.length s
+        val numSeqs : int = (l - n) + 1 (*total number of sub-sequences*)
+      in
+        Seq.tabulate (fn i => (Seq.subseq s (i, n))) numSeqs
+      end
+
+  (* subSeqs : 'a Seq.t -> 'a Seq.t Seq.t
+   * subSeqs s generates a sequence of all possible sub-sequences of
+   * parens
+   *)
+  fun subSeqs (s :'a Seq.t) : 'a Seq.t Seq.t =
+      let
+        val l = Seq.length s
+        val lengths = Seq.tabulate (fn (i : int) => i) l
+        val seqSeqSeq = Seq.map (subSeqs' s) lengths
+      in
+        Seq.flatten seqSeqSeq
+      end
+
+
+
+  fun pmatch_help (s : (Paren.t Seq.t)) : bool =
+      let
+        fun combine (count : int, p : Paren.t) = case p of
+                                                     Paren.L => count+1
+                                                    |Paren.R => count-1
+        val count = Seq.iterate combine 0 s
+      in
+        count = 0
+      end
+
+  (*Write maxDist*)
+
+  fun findLeftMost (parens : Paren.t Seq.t) : int =
+      let
+        val indices = Seq.enum parens
+        (* enum : 'a seq -> (int * 'a) seq*)
+        fun comb_fn (i : int,(p : Paren.t, j : int)) : int =
+            case (i,p) of
+                ((~1), Paren.L) => j
+               |((~1), Paren.R) => (~1)
+               |(_, _) => i
+      in
+        Seq.iterate comb_fn (~1) indices
+      end
+
+  fun findRightMost (parens : Paren.t Seq.t) : int =
+      let
+        val indices = Seq.enumerate parens
+        fun comb_fn (i : int,(p : Paren.t, j : int)) : int =
+            case (i,p) of
+                ((~1), Paren.L) => (~1)
+               |((~1), Paren.R) => j
+               |(_, Paren.L) => i
+               |(_, Paren.R) => j
+      in
+        Seq.iterate comb_fn (~1) indices
+      end
+
+
+  fun maxDist (parens : Paren.t Seq.t) : int =
+      let
+        val leftmost : int = findLeftmost parens
+        val rightmost : int = findRightmost parens
+      in
+        rightmost - leftmost
+      end
+
+  fun matchDist (parens : Paren.t Seq.t) : (bool * int) =
+      (parenMatch parens, maxDist parens)
+
+  fun distOps (subs : Paren.t Seq.t Seq.t) : (int options) Seq.t =
+      let
+        val comp1 = Seq.map matchDist subs
+        fun filter_fn (match : bool, dist : int) : int option =
+            if match then SOME dist else NONE
+      in
+        Seq.map filter_fn comp1
+      end
+
+  fun maxDist (a : int option, b : int option) : int option =
+      case (a, b) of
+          (NONE, _) => NONE
+         |(SOME x, NONE) => NONE
+         |(SOME x, SOME y) => SOME (Int.max(x,y))
+
+  (* parenDist : Paren.t Seq.t -> int option
+     REQUIRES: none
+     ENSURES: parenDist parens => NONE if parens is not a non-empty matched
+              sequence of parentheses,
+              otherwise => SOME l, where l is the MPD of parens
+   *)
+  fun parenDist (parens : Paren.t Seq.t) : int option =
+      let
+        val subs:Paren.t Seq.t Seq.t = subSeqs parens
+        val distOpts : (int option) Seq.t = distOpt subSeqs
+      in
+        Seq.iterate maxDist NONE distOpts
+      end
+
+(*
+  exception Issue
+
+  fun emptyCheck (s : 'a Seq.t) : bool =
+      case (Seq.length s) of
+          0 => true
+         |_ => false
+
+  (* findSubSeq_help : Paren.t Seq.t -> int -> int -> Paren.t Seq.t
+     REQUIRES: parens is not an empty sequence, 0 <= i, 0 <= count
+     ENSURES: findSubSeq_help parens i count => the first matched sequence of
+              parentheses in parens
+   *)
+  fun findSubSeq_help (parens : Paren.t Seq.t)
+                      (i : int) (count : int) : Paren.t Seq.t option=
+      let
+          val fc1 = count < 0
+          val fc2 = i >= Seq.length parens
+          val fc3 = count > 0
+          val failureCond : bool = fc1 orelse (fc2 andalso fc3)
+      in
+        case (failureCond) of
+            true => NONE
+           |false => case (i > 0, count = 0) of
+                        (true, true) => SOME (Seq.tabulate
+                                                  (fn j => Seq.nth parens j) i)
+                       |(false, false) => raise Issue
+                       |_ =>(case (Seq.nth parens i) of
+                             Paren.R => findSubSeq_help parens (i+1) (count-1)
+                            |Paren.L => findSubSeq_help parens (i+1) (count+1))
+      end
+
+  fun findSubSeq (parens : Paren.t Seq.t) : Paren.t Seq.t option =
+      case (emptyCheck parens) of
+          true => NONE
+        |false => findSubSeq_help parens 0 0
+
+  (* subParens: Paren.t Seq.t -> (Paren.t Seq.t option) Seq.t ->
+   *                             (Paren.t Seq.t option) Seq.t
+   * subParens takes in a sequence of parentheses and a sequence of
+   * parentheses sequence options, and the option sequence of either NONE or
+   * SOME matched subsequence of parens added to previous
+   *)
+  fun subParens (parens : Paren.t Seq.t)
+                (previous : (Paren.t Seq.t option) Seq.t) :
+      (Paren.t Seq.t option) Seq.t =
+      case (emptyCheck parens) of
+          true  => previous
+         |false =>
+         (let
+            val prev_len = Seq.length previous
+            val noneSeq_fn = (fn i => case (i) of 0 => NONE
+                                                 |_ => Seq.nth previous (i-1))
+
+            val paren_l = Seq.length parens
+         in
+          case (findSubSeq parens) of
+            NONE => Seq.tabulate nonSeq_fn (prev_len + 1)
+           |SOME s => let
+                        val sub_len = Seq.length s
+                        val someSeq_fn = (fn i => Seq.nth parens (i+sub_len))
+                        fun  newPrev_fn (0 : int) = SOME s
+                            |somePrev_fn (x : int) = Seq.nth previous (i-1)
+                      in
+                       (subParens (Seq.tabulate someSeq_fn (paren_l - sub_len))
+                                  (Seq.tabulate newPrev_fn (prev_len + 1)))
+                      end
+         end)
+
+  (* parenLength assumes parens is a matched argument*)
+  fun parenLength (parens : Paren.t Seq.t option) : int option =
+      case (parens) of
+          NONE => NONE
+         |SOME s => SOME((Seq.length s) - 2);
+
+  (* noneCheck returns true if s contains any NONE values*)
+  fun noneCheck (s : 'a option Seq.t) : bool =
+      let
+          val filter_fn = (fn (opt : 'a option) => case opt of NONE => true
+                                                             |_    => false)
+          val s' = Seq.filter filter_fn s
+      in
+         (Seq.length s') > 0
+      end
+
+
+  (* parenDist : Paren.t Seq.t -> int option
+     REQUIRES: none
+     ENSURES: parenDist parens => NONE if parens is not a non-empty matched
+              sequence of parentheses,
+              otherwise => SOME l, where l is the MPD of parens
+   *)
+  fun parenDist (parens : Paren.t Seq.t) : int option =
+      case (emptyCheck parens) of
+          true => NONE
+         |false =>
+          let
+            val subSeqs:(Paren.t Seq.t option) Seq.t = (subParens parens
+                                                           (Seq.empty ()))
+            val failCond = (emptyCheck subSeqs orelse noneCheck subSeqs);
+          in
+            case (failCond) of
+                true => NONE
+               |false => (Seq.reduce (fn (a : int option, b : int option) =>
+                                         case (a,b) of
+                                       (NONE, NONE) => NONE
+                                      |(NONE, _) => b
+                                      |(_, NONE) => a
+                                      |(SOME x, SOME y) => SOME (Int.max(x,y)))
+                                     NONE (Seq.map parenLength subSeqs))
+          end
+*)
+end

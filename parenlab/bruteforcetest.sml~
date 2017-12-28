@@ -1,0 +1,77 @@
+functor MkBruteForcePD (structure Seq : SEQUENCE)
+  :> PAREN_DIST where type 'a seq = 'a Seq.t =
+struct
+  type 'a seq = 'a Seq.t
+
+  exception NotYetImplemented
+
+  (* subSeqs' : 'a Seq.t -> int -> 'a Seq.t Seq.t
+   * REQUIRES: n <= (Seq.length s)
+   * ENSURES: subSeqs' s n generates a sequence of all sub-sequences of
+   *          length n in s
+   *)
+
+  fun subSeqs' (s : 'a Seq.t) (n : int) : 'a Seq.t Seq.t =
+      let
+        val numSeqs : int = (l - s) + 1 (*total number of sub-sequences*)
+      in
+        Seq.tabulate (fn i => (Seq.subseq s (i, n))) numSeqs
+      end
+
+  (* subSeqs : 'a Seq.t -> 'a Seq.t Seq.t
+   * subSeqs s generates a sequence of all possible sub-sequences of
+   * parens
+   *)
+  fun subSeqs (s :'a Seq.t) : 'a Seq.t Seq.t =
+      let
+        val l = Seq.length s
+        val lengths = Seq.tabulate (fn (i : int) => i) l
+        val seqSeqSeq = Seq.map (subSeqs' s) lengths
+      in
+        flatten seqSeqSeq
+      end
+
+
+
+  fun pmatch_help (s : (Paren.t Seq.t)) : bool =
+      let
+        fun combine (count : int, p : Paren.t) = case p of
+                                                     Paren.L => count+1
+                                                    |Paren.R => count-1
+        val count = Seq.iterate combine 0 s
+      in
+        count = 0
+      end
+
+  (*Write maxDist*)
+
+  fun matchDist (parens : Paren.t Seq.t) : (bool * int) =
+      (parenMatch parens, maxDist parens)
+
+  fun distOps (subs : Paren.t Seq.t Seq.t) : (int options) Seq.t =
+      let
+        val comp1 = Seq.map matchDist subs
+        fun filter_fn (match : bool, dist : int) : int option =
+            if match then SOME dist else NONE
+      in
+        Seq.map filter_fn comp1
+      end
+
+  (* parenDist : Paren.t Seq.t -> int option
+     REQUIRES: none
+     ENSURES: parenDist parens => NONE if parens is not a non-empty matched
+              sequence of parentheses,
+              otherwise => SOME l, where l is the MPD of parens
+   *)
+  fun parenDist (parens : Paren.t Seq.t) : int option =
+      case (emptyCheck parens) of
+          true => NONE
+         |false =>
+          let
+            val subs:Paren.t Seq.t Seq.t = subSeqs parens
+            val distOpts : (int option) Seq.t = distOpt subSeqs
+          in
+            Seq.iterate maxDist NONE distOpts
+          end
+
+end
