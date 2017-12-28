@@ -1,0 +1,273 @@
+/* significantly modified by Favonia for 15210-f15 */
+
+/* COPYRIGHT (c) 2014 Umut Acar, Arthur Chargueraud, and Michael
+ * Rainey
+ * All rights reserved.
+ *
+ * \file tasks.hpp
+ * \brief File that students are to use to enter solutions to the
+ *  exercises that are assigned in the book.
+ *
+ */
+
+#include <limits.h>
+#include <math.h>
+#include <assert.h>
+#include <stdio.h>
+
+#include "sparray.hpp"
+#include "graph.hpp"
+#include "sort.hpp"
+
+#ifndef _TASKS_H_
+#define _TASKS_H_
+
+/***********************************************************************/
+
+namespace tasks {
+
+/* 01010010 01100101 01100100 01110101 01100011 01100101 */
+
+controller_type reduce_contr("reduce");
+
+template <class Assoc_binop>
+value_type reduce_rec(const Assoc_binop& f, const sparray& xs,
+                      long lo, long hi) {
+
+  value_type result;
+  long n = hi - lo;
+
+  par::cstmt(reduce_contr, [&] {return n;}, [&] {
+
+      //BASE CASE: ((lo+1)==hi) then return xs[lo]
+
+      if ((lo+1) == hi) { /* we've reached the end! */
+
+        result = xs[lo];
+
+      } else { /* not at the end yet... */
+
+        long mid = lo + (n/2);
+        value_type left,right;
+
+        par::fork2([&] {
+            // first branch
+
+            left = reduce_rec(f, xs, lo, mid);
+          }, [&] {
+            // second branch
+            right = reduce_rec(f, xs, mid, hi);
+          });
+        //join point
+
+        result = f(left,right);
+      }
+    });
+
+  return result;
+
+}
+
+template <class Assoc_binop>
+value_type reduce(const Assoc_binop& f, value_type b, const sparray& xs) {
+  if (xs.size() == 0) return b;
+  return reduce_rec(f, xs, 0, xs.size());
+}
+
+/*   __  __                    __ _                                    _
+ *  |  \/  |   ___      _ _   / _` |   ___     ___     ___      _ _   | |_
+ *  | |\/| |  / -_)    | '_|  \__, |  / -_)   (_-<    / _ \    | '_|  |  _|
+ *  |_|__|_|  \___|   _|_|_   |___/   \___|   /__/_   \___/   _|_|_   _\__|
+ *  _|"""""|_|"""""|_|"""""|_|"""""|_|"""""|_|"""""|_|"""""|_|"""""|_|"""""|
+ *  "`-0-0-'"`-0-0-'"`-0-0-'"`-0-0-'"`-0-0-'"`-0-0-'"`-0-0-'"`-0-0-'"`-0-0-'
+ */
+
+controller_type mergesort_contr("mergesort");
+void mergesort_rec(sparray& result, sparray& temp, long lo, long hi);
+void merge(const sparray& xs, sparray& result, long result_lo,
+           long Alo, long Ahi, long Blo, long Bhi);
+
+/*@brief: Wrapper for the recursive mergesort*/
+sparray mergesort(const sparray& input) {
+  long len = input.size();
+  // Result start off as input and gets more sorted
+  sparray result = copy(input);
+  // Allocated a temp upfront, so we don't allocate anything later.
+  sparray temp = copy(input);
+  mergesort_rec(result, temp, 0L, len);
+  return result;
+}
+
+/*@brief: Mergesorts result in place, and uses temp
+ *        to hold temporary changes.
+ *@note: in_place_sort() is defined in sort.hpp
+ *@param: lo is inclusive!
+ *@param: hi is exclusive!
+ */
+void mergesort_rec(sparray& result, sparray& temp,
+                   long lo, long hi) {
+    long len = hi - lo;
+    if(len < 2) return;
+    par::cstmt(mergesort_contr, [&] { return nlogn(len); }, [&] {
+      long mid = lo + len / 2;
+      par::fork2([&] {
+        mergesort_rec(result, temp, lo, mid);
+      }, [&] {
+        mergesort_rec(result, temp, mid, hi);
+      });
+      merge(result, temp, lo, lo, mid, mid, hi);
+      // Copy from temp back into result
+      prim::pcopy(&temp[0], &result[0], lo, hi, lo);
+    }, [&] {
+      in_place_sort(result, lo, hi); // Leave this alone!
+    });
+}
+
+long findRank(const sparray& xs, long Blo, long Bhi, value_type x){
+
+  std::cout << "Calling findrank on xs[" << Blo << "," << Bhi << "], x = " << x << std::endl;
+
+  long c = Blo + ((Bhi - Blo)/2);
+  value_type mid = xs[c];
+
+  // Special case if B is a singleton
+  if ((Blo + 1) == Bhi) {
+    std::cout << "Returning early: c = " << c << ", xs[c] = " << xs[c] << std::endl;
+    return (mid >= x) ? c : (c+1) ;
+  }
+
+  // Special case is B only has two elements
+  if ((Blo+2) == Bhi) {
+    value_type lo = xs[Blo];
+    if (x <= lo) {
+      return Blo;
+    } else if (x <= mid) {
+      return c;
+    } else {
+      return Bhi;
+    }
+  }
+
+  value_type l = xs[c-1];
+  value_type r = xs[c+1];
+
+  if ((x == mid) || ((l < x) && (x < r))) {
+    return c;
+  }
+
+  if (x == l) {
+    return c-1;
+  }
+
+  if (x == r) {
+    return c+1;
+  }
+
+  if (x < l) {
+    return findRank(xs, Blo, c-1, x);
+  }
+
+  return findRank(xs, c+1, Bhi, x);
+
+}
+
+controller_type merge_contr("merge");
+void merge(const sparray& xs, sparray& result, long result_lo,
+           long Alo, long Ahi, long Blo, long Bhi){
+  long Asize = Ahi - Alo;
+  long Bsize = Bhi - Blo;
+
+  par::cstmt(merge_contr, [&] {return Asize+Bsize;}, [&] {
+      // Base case 1
+      if (Bsize > Asize) {
+        merge(xs, result, result_lo, Blo, Bhi, Alo, Ahi);
+      } else
+
+      // Base case 2
+      if (Bsize == 0) {
+        for (long i = 0 ; i < Asize ; i++) {
+          result[result_lo+i] = xs[Alo+i];
+        }
+        return;
+      } else
+
+      //Base case 3
+      if ((Asize == 1) && (Bsize == 1)) {
+        value_type min = min_fct(xs[Alo], xs[Blo]);
+        value_type max = max_fct(xs[Alo], xs[Blo]);
+        //std::cout << "Placing min = " << min << " at index " << result_lo << ", placing max = " << max << " at index " << (result_lo+1) << std::endl;
+        result[result_lo] = min;
+        result[result_lo + 1] = max;
+        return;
+      } else {
+
+      //Finally: our recursive case!
+      long Amid = Alo + ((Ahi - Alo)/2);
+      value_type x = xs[Amid];
+      long Bmid = findRank(xs, Blo, Bhi, x);
+      std::cout << "x = " << x << ", Alo = " << Alo << ", Amid = " << Amid << ", Ahi = " << Ahi << ", Blo = " << Blo << ", Bmid = " << Bmid << ", Bhi = " << Bhi << std::endl;
+
+      par::fork2([&] {
+          //first branch
+          merge(xs, result, result_lo, Alo, Amid, Blo, Bmid);
+        }, [&] {
+          //second branch
+          long l1 = Amid - Alo;
+          long l2 = Bmid - Blo;
+          merge(xs, result, result_lo + l1 + l2, Amid, Ahi, Bmid, Bhi);
+        });
+
+      }
+
+      return;
+    });
+
+  return;
+
+}
+
+/*
+ *  o--o  o--o  o-o
+ *  |   | |    |
+ *  O--o  O-o   o-o
+ *  |   | |        |
+ *  o--o  o    o--o
+ *
+ */
+
+sparray edge_map(const adjlist& graph,
+                 std::atomic<bool>* visited,
+                 const sparray& in_frontier) {
+  //@TODO: implement me
+  return sparray(0);
+}
+
+loop_controller_type bfs_par_init_contr("bfs_init");
+sparray bfs_par(const adjlist& graph, vtxid_type source) {
+  long n = graph.get_nb_vertices();
+  std::atomic<bool>* visited = my_malloc<std::atomic<bool>>(n);
+  par::parallel_for(bfs_par_init_contr, 0L, n, [&] (long i) {
+    visited[i].store(false);
+  });
+  visited[source].store(true);
+  sparray cur_frontier = { source };
+  while (cur_frontier.size() > 0)
+    cur_frontier = edge_map(graph, visited, cur_frontier);
+  sparray result = tabulate([&] (value_type i) { return visited[i].load(); }, n);
+  free(visited);
+  return result;
+}
+
+sparray bfs(const adjlist& graph, vtxid_type source) {
+#ifdef SEQUENTIAL_BASELINE
+  return bfs_seq(graph, source);
+#else
+  return bfs_par(graph, source);
+#endif
+}
+
+#endif /*! _TASKS_H_ */
+
+} // end namespace
+
+/***********************************************************************/
